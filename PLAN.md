@@ -420,12 +420,12 @@ youtube-clipper/
 - [ ] Config file support
 - [ ] Presets
 
-### 🔲 M2: Auto Finder (Phase 2)
-- [ ] Full video transcription
-- [ ] Claude API integration
-- [ ] Clip scoring algorithm
-- [ ] Frame validation
-- [ ] Batch export
+### ✅ M2: Auto Finder (Phase 2)
+- [x] Full video transcription
+- [x] Claude API integration
+- [x] Clip scoring algorithm
+- [x] Frame validation (basic - thumbnail extraction)
+- [x] Batch export
 
 ### 🔲 M3: GUI (Phase 3)
 - [ ] Video player widget
