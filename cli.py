@@ -6,6 +6,8 @@ Extract, crop, and caption YouTube video clips.
 
 import re
 import shutil
+import subprocess
+import sys
 from datetime import datetime
 
 import click
@@ -23,7 +25,7 @@ BATCH_PADDING_SECONDS = 10
 
 
 @click.group()
-@click.version_option(version="1.0.0")
+@click.version_option(version="1.1.0")
 def cli():
     """YouTube Clipper - Extract, crop, and caption video clips."""
     pass
@@ -40,10 +42,46 @@ def _remove_if_exists(path: Optional[Path]) -> None:
         pass
 
 
+@cli.command(name="output")
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("output"),
+    show_default=True,
+    help="Folder containing generated clips",
+)
+def open_output(output_dir: Path) -> None:
+    """Open the output folder and select the most recently saved video."""
+    output_dir = output_dir.resolve()
+    videos = [
+        path for path in output_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".mp4", ".mov", ".webm", ".m4v"}
+    ] if output_dir.exists() else []
+    latest_video = max(videos, key=lambda path: path.stat().st_mtime) if videos else None
+
+    if latest_video is not None:
+        target = latest_video.resolve()
+        click.echo(f"Latest video: {target}")
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        target = output_dir
+        click.echo(f"No videos found. Opening: {target}")
+
+    if sys.platform == "win32":
+        if latest_video is not None:
+            subprocess.Popen(["explorer.exe", f"/select,{target}"])
+        else:
+            subprocess.Popen(["explorer.exe", str(target)])
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(target)] if latest_video else ["open", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target)])
+
+
 @cli.command()
 @click.option(
     "--aspect", "-a",
-    type=click.Choice(["mobile", "square", "desktop"]),
+    type=click.Choice(["original", "mobile", "square", "desktop"]),
     default="mobile", show_default=True,
     help="Target aspect ratio",
 )
@@ -80,6 +118,7 @@ def batch(
             caption_style=caption_style,
             caption_position=caption_position,
             padding_seconds=BATCH_PADDING_SECONDS,
+            output_dir=str(output_dir),
         )
     )
     if config is None:
@@ -94,6 +133,7 @@ def batch(
     download_once = config.download_once
     padding_seconds = config.padding_seconds
     ranges: List[Tuple[float, float]] = config.ranges
+    output_dir = Path(config.output_dir)
 
     if not ranges:
         click.echo("No clips entered; nothing to do.")
@@ -106,6 +146,7 @@ def batch(
     output_dir = output_dir / batch_folder
     output_dir.mkdir(parents=True, exist_ok=True)
     aspect_enum = {
+        "original": AspectRatio.ORIGINAL,
         "mobile": AspectRatio.MOBILE,
         "square": AspectRatio.SQUARE,
         "desktop": AspectRatio.DESKTOP,
@@ -202,7 +243,7 @@ def batch(
 @click.option(
     "--aspect",
     "-a",
-    type=click.Choice(["mobile", "square", "desktop"]),
+    type=click.Choice(["original", "mobile", "square", "desktop"]),
     default=None,
     help="Target aspect ratio",
 )
@@ -274,6 +315,7 @@ def extract(
     if aspect:
         print(f"\n✂️  Step 2: Cropping to {aspect}...")
         aspect_enum = {
+            "original": AspectRatio.ORIGINAL,
             "mobile": AspectRatio.MOBILE,
             "square": AspectRatio.SQUARE,
             "desktop": AspectRatio.DESKTOP,
@@ -370,7 +412,7 @@ def transcribe(video: str, model: str, output: Optional[str]):
 @click.option("--whisper-model", default="base", help="Whisper model size")
 @click.option("--output", "-o", type=click.Choice(["table", "json"]), default="table")
 @click.option("--export-all", is_flag=True, help="Export all found clips")
-@click.option("--aspect", "-a", type=click.Choice(["mobile", "square", "desktop"]), default=None)
+@click.option("--aspect", "-a", type=click.Choice(["original", "mobile", "square", "desktop"]), default=None)
 @click.option("--captions/--no-captions", default=True)
 def find(
     url: str,
@@ -473,6 +515,7 @@ def find(
     if export_all and aspect:
         print(f"\n📦 Exporting {len(clips)} clips...")
         aspect_enum = {
+            "original": AspectRatio.ORIGINAL,
             "mobile": AspectRatio.MOBILE,
             "square": AspectRatio.SQUARE,
             "desktop": AspectRatio.DESKTOP,
@@ -513,7 +556,7 @@ def find(
 
 @cli.command()
 @click.argument("clip_ids")
-@click.option("--aspect", "-a", type=click.Choice(["mobile", "square", "desktop"]), default="mobile")
+@click.option("--aspect", "-a", type=click.Choice(["original", "mobile", "square", "desktop"]), default="mobile")
 @click.option("--captions/--no-captions", default=True)
 @click.option("--caption-style", type=click.Choice(["clean", "bold", "typewriter"]), default="clean")
 def export(clip_ids: str, aspect: str, captions: bool, caption_style: str):
@@ -549,6 +592,7 @@ def export(clip_ids: str, aspect: str, captions: bool, caption_style: str):
         return
     
     aspect_enum = {
+        "original": AspectRatio.ORIGINAL,
         "mobile": AspectRatio.MOBILE,
         "square": AspectRatio.SQUARE,
         "desktop": AspectRatio.DESKTOP,

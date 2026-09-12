@@ -23,13 +23,14 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
+from textual.events import Paste
 from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from core.timecode import format_ffmpeg_timestamp, is_full_video_marker, parse_clip_range
 
-APP_VERSION = "v0.1.0"
+APP_VERSION = "v1.1.0"
 BANNER_ART = pyfiglet.figlet_format("CLIPPER", font="ansi_shadow").rstrip("\n")
 
 WIZARD_CSS = """
@@ -145,6 +146,57 @@ Input.-placeholder {
     color: #9dbdb1;
 }
 
+.timestamp-label {
+    width: 90%;
+    max-width: 90;
+    content-align: left middle;
+    color: #33ff99;
+    text-style: bold;
+    margin-top: 1;
+}
+
+.timestamp-box {
+    width: 90%;
+    max-width: 90;
+    min-height: 5;
+    border: heavy #33ff99;
+    background: #061b12;
+    padding: 1 1;
+    margin: 0;
+}
+
+.timestamp-box:focus-within {
+    border: heavy #8affd0;
+    background: #0a231b;
+}
+
+.timestamp-box Input {
+    min-height: 1;
+    height: 1;
+    color: #ffffff;
+    background: #010b08;
+    border: none;
+    padding: 0 1;
+    text-style: bold;
+}
+
+.timestamp-box Input:focus {
+    color: #ffffff;
+    background: #041c14;
+    border: none;
+}
+
+.timestamp-box Input.-placeholder {
+    color: #ffffff;
+    text-style: bold;
+}
+
+.timestamp-box Input:focus > .input--cursor {
+    background: #33ff99;
+    color: #000000;
+    text-style: bold;
+}
+
 OptionList {
     border: heavy #2ecc71;
     background: #000000;
@@ -186,6 +238,7 @@ class BatchConfig:
     download_once: bool
     padding_seconds: int
     ranges: List[Tuple[float, float]]
+    output_dir: str
 
 
 @dataclass
@@ -196,6 +249,7 @@ class WizardDefaults:
     caption_style: str = "clean"
     caption_position: str = "bottom"
     padding_seconds: int = 10
+    output_dir: str = "output"
 
 
 class BannerMixin:
@@ -263,6 +317,19 @@ class TextStepScreen(WizardScreen):
         self.dismiss(value)
 
 
+class TimestampInput(Input):
+    """Input that sends multiline clipboard content to the range screen."""
+
+    def _on_paste(self, event: Paste) -> None:
+        if "\n" in event.text or "\r" in event.text:
+            screen = self.screen
+            if isinstance(screen, ClipRangesScreen):
+                screen.handle_pasted_ranges(event.text)
+                event.stop()
+                return
+        super()._on_paste(event)
+
+
 class ChoiceStepScreen(WizardScreen):
     """An arrow-key navigable list of options, like MovieBox's category list."""
 
@@ -308,8 +375,12 @@ class ClipRangesScreen(WizardScreen):
             yield Static(
                 "Paste one range per line, e.g. 1:24 - 2:03", classes="step-title"
             )
-            with Vertical(classes="input-box"):
-                yield Input(placeholder=f"Clip {len(self._ranges) + 1}", id="field")
+            yield Static("TIMESTAMP INPUT", classes="timestamp-label")
+            with Vertical(classes="timestamp-box"):
+                yield TimestampInput(
+                    placeholder=f"Type Clip {len(self._ranges) + 1} here...",
+                    id="field",
+                )
             yield Static(
                 "Enter to add a clip · type DONE when finished · Esc to cancel",
                 classes="hint",
@@ -323,37 +394,45 @@ class ClipRangesScreen(WizardScreen):
         self._refresh_log()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        line = event.value.strip()
-        field = self.query_one("#field", Input)
-        error = self.query_one("#error", Static)
+        finished = event.value.strip().upper() == "DONE"
+        self._add_range(event.value)
+        if not finished:
+            field = self.query_one("#field", Input)
+            field.value = ""
+            field.placeholder = f"Type Clip {len(self._ranges) + 1} here..."
 
-        if line.upper() == "DONE":
-            self.action_finish()
-            return
+    def _add_range(self, line: str) -> bool:
+        line = line.strip()
+        error = self.query_one("#error", Static)
         if not line:
             error.update("⚠ Enter a range, or type DONE to finish.")
-            return
-
+            return False
+        if line.upper() == "DONE":
+            self.action_finish()
+            return True
         if is_full_video_marker(line):
             self._ranges.append((-1.0, -1.0))
-            error.update("")
-            field.value = ""
-            field.placeholder = f"Clip {len(self._ranges) + 1}"
-            self._refresh_log()
-            return
-
-        try:
-            start, end = parse_clip_range(line)
-        except ValueError as exc:
-            error.update(f"⚠ Invalid range: {exc}")
-            return
-
-        start = max(0.0, start - self._padding)
-        end += self._padding
-        self._ranges.append((start, end))
+        else:
+            try:
+                start, end = parse_clip_range(line)
+            except ValueError as exc:
+                error.update(f"⚠ Invalid range: {exc}")
+                return False
+            self._ranges.append((max(0.0, start - self._padding), end + self._padding))
         error.update("")
+        return True
+
+    def handle_pasted_ranges(self, pasted_text: str) -> None:
+        """Add every non-empty pasted line as a separate clip range."""
+        import re
+
+        lines = [line.strip() for line in pasted_text.splitlines() if line.strip()]
+        for line in lines:
+            line = re.sub(r"^\s*\d+[.)]\s*", "", line)
+            self._add_range(line)
+        field = self.query_one("#field", Input)
         field.value = ""
-        field.placeholder = f"Clip {len(self._ranges) + 1}"
+        field.placeholder = f"Type Clip {len(self._ranges) + 1} here..."
         self._refresh_log()
 
     def _refresh_log(self) -> None:
@@ -405,6 +484,7 @@ class SummaryScreen(WizardScreen):
             f"Download     {'once, reused for all clips' if c.download_once else 'per clip'}",
             f"Padding      {c.padding_seconds}s",
             f"Clips        {len(c.ranges)}",
+            f"Save to      {c.output_dir}",
         ])
         with Vertical(id="stage"):
             yield Static("Ready to go", classes="step-title")
@@ -461,7 +541,8 @@ class BatchWizardApp(App):
         aspect = await self.push_screen_wait(
             ChoiceStepScreen(
                 "Video format",
-                [("mobile", "Mobile (9:16)"), ("square", "Square (1:1)"),
+                [("original", "Original (keep source format)"),
+                 ("mobile", "Mobile (9:16)"), ("square", "Square (1:1)"),
                  ("desktop", "Desktop (16:9)")],
                 initial=d.aspect,
             )
@@ -535,6 +616,22 @@ class BatchWizardApp(App):
         if ranges is None:
             return None
 
+        def _validate_output_dir(value: str) -> None:
+            if not value.strip():
+                raise ValueError("enter a folder path")
+
+        output_dir = await self.push_screen_wait(
+            TextStepScreen(
+                "Where should this batch be saved?",
+                placeholder=d.output_dir,
+                initial=d.output_dir,
+                validator=_validate_output_dir,
+                hint="Press Enter to confirm this folder",
+            )
+        )
+        if output_dir is None:
+            return None
+
         config = BatchConfig(
             url=url,
             aspect=aspect,
@@ -544,6 +641,7 @@ class BatchWizardApp(App):
             download_once=download_once,
             padding_seconds=padding_seconds,
             ranges=ranges,
+            output_dir=output_dir,
         )
 
         confirmed = await self.push_screen_wait(SummaryScreen(config))

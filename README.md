@@ -10,7 +10,7 @@ YouTube Clipper is a Python CLI for turning a YouTube video into clean short cli
 
 This project is designed to be simple and local-first: you point it at a YouTube URL, choose your crop and timing, and export a finished clip.
 
-**Version 1.0.0** is the first release of the working CLI and batch workflow.
+**Version 1.1.0** is the current release of the working CLI and batch workflow.
 
 ## Get the project
 
@@ -51,12 +51,13 @@ clipper extract "https://www.youtube.com/watch?v=VIDEO_ID" \
 Use `batch` when you already know the times you want to create. The app walks through:
 
 1. YouTube URL
-2. output aspect ratio (`mobile`, `square`, or `desktop`)
+2. output format (`original`, `mobile`, `square`, or `desktop`)
 3. whether to caption every clip
 4. caption style and position
 5. whether to reuse one downloaded source for all clips or download each clip separately
 6. padding around each range
 7. the ranges to make
+8. the folder where the batch should be saved
 
 Example ranges:
 
@@ -67,8 +68,20 @@ Example ranges:
 DONE
 ```
 
+You can also paste a numbered list of ranges all at once. Each line becomes
+the next clip automatically:
+
+```text
+1. (0:04:52 - 0:08:40)
+2. (0:10:13 - 0:12:45)
+3. (0:17:14 - 0:23:45)
+```
+
 To download the complete video, enter `full` as a range. This is useful when
 you want the normal crop and caption processing applied to the full source.
+
+Choose `original` as the video format to keep the source video's dimensions
+and aspect ratio without cropping.
 
 The app writes each batch into a unique output folder like:
 
@@ -77,6 +90,9 @@ output/batch_2026-09-12_18-40-12/
 ```
 
 Each clip is saved as `clip_01.mp4`, `clip_02.mp4`, and so on.
+
+Use `clipper output` after processing to open the output folder and select the
+most recently saved video in Windows Explorer.
 
 ### Auto clip finding
 
@@ -154,6 +170,9 @@ clipper extract "https://www.youtube.com/watch?v=VIDEO_ID" \
 # Run the batch wizard
 clipper batch
 
+# Open the output folder and select the latest saved video
+clipper output
+
 # Transcribe a local video file to SRT
 clipper transcribe video.mp4 -o transcript.srt
 
@@ -194,6 +213,13 @@ temporary media are intentionally ignored by Git.
 - Captions are burned into the final output video using FFmpeg subtitle rendering.
 - The app is designed for real-world editing workflows, not a polished desktop editor.
 - This project is still evolving, but the core CLI workflows above are already implemented.
+
+## Version 1.1.0 changes
+
+- Added the `original` format to preserve source dimensions and aspect ratio.
+- Added multiline timestamp paste with automatic clip numbering.
+- Added a batch save-folder prompt before final confirmation.
+- Added `clipper output` to open and select the latest generated video.
 
 ## License
 

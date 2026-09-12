@@ -5,12 +5,14 @@ Handles cropping, aspect ratio changes, and basic transformations.
 
 import subprocess
 import json
+import shutil
 from pathlib import Path
 from typing import Optional, Tuple
 from enum import Enum
 
 
 class AspectRatio(Enum):
+    ORIGINAL = "original"
     MOBILE = "9:16"      # TikTok, Reels, Shorts
     SQUARE = "1:1"       # Instagram feed
     DESKTOP = "16:9"     # YouTube, standard
@@ -55,6 +57,11 @@ def crop_video(
         Path to cropped video
     """
     width, height = get_video_dimensions(input_path)
+
+    if aspect_ratio is AspectRatio.ORIGINAL:
+        shutil.copy2(input_path, output_path)
+        print(f"Keeping original format ({width}x{height})")
+        return output_path
     
     # Parse target ratio
     ratio_parts = aspect_ratio.value.split(":")
