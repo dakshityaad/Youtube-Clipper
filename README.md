@@ -10,6 +10,15 @@ YouTube Clipper is a Python CLI for turning a YouTube video into clean short cli
 
 This project is designed to be simple and local-first: you point it at a YouTube URL, choose your crop and timing, and export a finished clip.
 
+## Get the project
+
+Clone the repository and open its folder:
+
+```bash
+git clone https://github.com/dakshityaad/youtube-clipper.git
+cd youtube-clipper
+```
+
 ## What the app does today
 
 The repository already includes a working CLI with these commands:
@@ -56,6 +65,9 @@ Example ranges:
 DONE
 ```
 
+To download the complete video, enter `full` as a range. This is useful when
+you want the normal crop and caption processing applied to the full source.
+
 The app writes each batch into a unique output folder like:
 
 ```text
@@ -76,13 +88,22 @@ This feature uses Whisper and Anthropic. If you use the AI-assisted chunk analys
 
 ## Installation
 
-### 1) Install Python dependencies
+### Windows PowerShell
+
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2) Install the CLI in editable mode
+Install the CLI in editable mode:
 
 ```bash
 pip install -e .
@@ -90,11 +111,17 @@ pip install -e .
 
 This installs the `clipper` command.
 
-### 3) Install FFmpeg
+### Install FFmpeg
 
 FFmpeg and ffprobe must be available on your system PATH.
 
 On Windows, install FFmpeg and make sure the binary folder is added to PATH.
+
+After installation, verify the command is available:
+
+```powershell
+clipper --help
+```
 
 ## Requirements
 
@@ -106,6 +133,8 @@ On Windows, install FFmpeg and make sure the binary folder is added to PATH.
 Optional:
 
 - `ANTHROPIC_API_KEY` for the transcript-based clip finder
+
+Keep secrets in a local `.env` file. Do not commit API keys to GitHub.
 
 ## Typical commands
 
@@ -145,14 +174,17 @@ youtube-clipper/
 │   ├── analyzer.py         # clip recommendation logic
 │   ├── timecode.py         # timestamp parsing/formatting helpers
 │   └── tui.py              # batch wizard UI
-├── output/                 # generated clip output folders
 ├── requirements.txt        # Python dependencies
 ├── setup.py                # package metadata and console entry point
 ├── PLAN.md                 # project plan/status
 ├── README.md               # user-facing overview
-├── clips_found.json        # created by `clipper find`
-└── .gitignore              # project ignore rules
+├── LICENSE                 # MIT license for this project
+├── tests/                  # regression tests
+└── .gitignore              # files excluded from Git
 ```
+
+Generated folders such as `output/`, virtual environments, Python caches, and
+temporary media are intentionally ignored by Git.
 
 ## Notes
 
