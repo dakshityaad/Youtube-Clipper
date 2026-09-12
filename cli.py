@@ -23,7 +23,7 @@ BATCH_PADDING_SECONDS = 10
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version="1.0.0")
 def cli():
     """YouTube Clipper - Extract, crop, and caption video clips."""
     pass

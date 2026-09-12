@@ -10,6 +10,8 @@ YouTube Clipper is a Python CLI for turning a YouTube video into clean short cli
 
 This project is designed to be simple and local-first: you point it at a YouTube URL, choose your crop and timing, and export a finished clip.
 
+**Version 1.0.0** is the first release of the working CLI and batch workflow.
+
 ## Get the project
 
 Clone the repository and open its folder:
