@@ -32,6 +32,21 @@ The repository already includes a working CLI with these commands:
 - `clipper find` — search a video for likely clip candidates using transcript analysis
 - `clipper export` — export a selected set of clips from a previous `find` run
 
+## Screenshots
+
+### Batch timestamp input
+
+![Batch timestamp input](screenshots/batch-timestamps.png)
+
+### Batch summary
+
+![Batch summary](screenshots/batch-summary.png)
+
+Add project screenshots to the `screenshots/` folder using these filenames:
+
+- `batch-timestamps.png`
+- `batch-summary.png`
+
 ## Features
 
 ### Manual clip creation
