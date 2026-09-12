@@ -4,14 +4,22 @@ YouTube Clipper CLI
 Extract, crop, and caption YouTube video clips.
 """
 
+import re
+import shutil
+from datetime import datetime
+
 import click
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from core.downloader import download_clip, get_video_info
-from core.processor import crop_video, AspectRatio
+from core.processor import crop_video, trim_video, AspectRatio
 from core.captioner import transcribe_video, burn_captions, CaptionStyle, edit_transcript
 from core.analyzer import find_clips, print_clips_table, format_time
+from core.timecode import format_ffmpeg_timestamp
+from core.tui import run_batch_wizard, WizardDefaults
+
+BATCH_PADDING_SECONDS = 10
 
 
 @click.group()
@@ -19,6 +27,172 @@ from core.analyzer import find_clips, print_clips_table, format_time
 def cli():
     """YouTube Clipper - Extract, crop, and caption video clips."""
     pass
+
+
+def _remove_if_exists(path: Optional[Path]) -> None:
+    """Remove a temporary file without hiding an earlier processing error."""
+    if path is None:
+        return
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
+
+
+@cli.command()
+@click.option(
+    "--aspect", "-a",
+    type=click.Choice(["mobile", "square", "desktop"]),
+    default="mobile", show_default=True,
+    help="Target aspect ratio",
+)
+@click.option("--crop-x", type=float, default=50.0, show_default=True,
+              help="Crop horizontal position: 0=left, 50=center, 100=right")
+@click.option("--captions/--no-captions", default=True, show_default=True,
+              help="Add captions to every clip")
+@click.option("--caption-style", type=click.Choice(["clean", "bold", "typewriter"]),
+              default="clean", show_default=True, help="Caption style preset")
+@click.option("--caption-position", type=click.Choice(["top", "center", "bottom"]),
+              default="bottom", show_default=True, help="Caption vertical position")
+@click.option("--edit-transcript", is_flag=True,
+              help="Edit each clip transcript before captions are burned")
+@click.option("--whisper-model", default="base", show_default=True,
+              help="Whisper model size")
+@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path),
+              default=Path("output"), show_default=True,
+              help="Folder for generated clips")
+def batch(
+    aspect: str,
+    crop_x: float,
+    captions: bool,
+    caption_style: str,
+    caption_position: str,
+    edit_transcript: bool,
+    whisper_model: str,
+    output_dir: Path,
+):
+    """Interactively create several clips from one YouTube video."""
+    config = run_batch_wizard(
+        WizardDefaults(
+            aspect=aspect,
+            captions=captions,
+            caption_style=caption_style,
+            caption_position=caption_position,
+            padding_seconds=BATCH_PADDING_SECONDS,
+        )
+    )
+    if config is None:
+        click.echo("Cancelled.")
+        return
+
+    url = config.url
+    aspect = config.aspect
+    captions = config.captions
+    caption_style = config.caption_style
+    caption_position = config.caption_position
+    download_once = config.download_once
+    padding_seconds = config.padding_seconds
+    ranges: List[Tuple[float, float]] = config.ranges
+
+    if not ranges:
+        click.echo("No clips entered; nothing to do.")
+        return
+
+    click.echo(f"\n🎬 Starting batch: {len(ranges)} clip(s) from {url}\n")
+
+
+    batch_folder = datetime.now().strftime("batch_%Y-%m-%d_%H-%M-%S")
+    output_dir = output_dir / batch_folder
+    output_dir.mkdir(parents=True, exist_ok=True)
+    aspect_enum = {
+        "mobile": AspectRatio.MOBILE,
+        "square": AspectRatio.SQUARE,
+        "desktop": AspectRatio.DESKTOP,
+    }[aspect]
+    style_enum = CaptionStyle[caption_style.upper()]
+
+    source_video: Optional[Path] = None
+    if download_once:
+        click.echo("\n📥 Downloading source video once...")
+        source_video = Path(download_clip(url))
+        click.echo("✓ Source downloaded")
+    else:
+        click.echo("\n📥 Each requested clip will be downloaded separately.")
+
+    completed = 0
+    try:
+        for index, range_value in enumerate(ranges, 1):
+            output_path = output_dir / f"clip_{index:02d}.mp4"
+            trimmed_path = output_dir / f".clip_{index:02d}.trimmed.mp4"
+            cropped_path = output_dir / f".clip_{index:02d}.cropped.mp4"
+            captioned_path = output_dir / f".clip_{index:02d}.captioned.mp4"
+            downloaded_clip: Optional[Path] = None
+
+            if range_value == (-1.0, -1.0):
+                start = 0.0
+                end = 0.0
+                clip_label = "FULL VIDEO"
+            else:
+                start, end = range_value
+                clip_label = f"{format_ffmpeg_timestamp(start)} - {format_ffmpeg_timestamp(end)}"
+
+            click.echo(
+                f"\n🎞️  Creating clip {index}/{len(ranges)} "
+                f"({clip_label})..."
+            )
+            try:
+                if range_value == (-1.0, -1.0):
+                    if download_once:
+                        clip_input = source_video
+                    else:
+                        downloaded_clip = Path(download_clip(url))
+                        clip_input = downloaded_clip
+                elif download_once:
+                    trim_video(
+                        source_video,
+                        trimmed_path,
+                        start_time=format_ffmpeg_timestamp(start),
+                        end_time=format_ffmpeg_timestamp(end),
+                    )
+                    clip_input = trimmed_path
+                else:
+                    downloaded_clip = Path(
+                        download_clip(url, format_ffmpeg_timestamp(start), format_ffmpeg_timestamp(end))
+                    )
+                    clip_input = downloaded_clip
+
+                crop_video(clip_input, cropped_path, aspect_enum, crop_x)
+
+                if captions:
+                    segments = transcribe_video(cropped_path, model=whisper_model)
+                    if edit_transcript:
+                        segments = edit_transcript(segments)
+                    burn_captions(
+                        cropped_path,
+                        captioned_path,
+                        segments=segments,
+                        style=style_enum,
+                        position=caption_position,
+                    )
+                    shutil.move(str(captioned_path), str(output_path))
+                else:
+                    shutil.move(str(cropped_path), str(output_path))
+
+                completed += 1
+                click.echo(f"✓ Saved: {output_path}")
+            except Exception as exc:
+                click.echo(f"✗ Clip {index} failed: {exc}", err=True)
+            finally:
+                _remove_if_exists(trimmed_path)
+                _remove_if_exists(cropped_path)
+                _remove_if_exists(captioned_path)
+                _remove_if_exists(downloaded_clip)
+    finally:
+        _remove_if_exists(source_video)
+
+    click.echo(f"\n✅ Finished {completed}/{len(ranges)} clips.")
+    click.echo(f"   Output: {output_dir.resolve()}")
 
 
 @cli.command()

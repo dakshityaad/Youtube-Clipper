@@ -22,7 +22,7 @@ STYLE_FONTS = {
     CaptionStyle.CLEAN: {
         "fontfile": "",  # Use system default
         "fontname": "Arial",
-        "fontsize": 48,
+        "fontsize": 10,
         "fontcolor": "white",
         "borderw": 2,
         "bordercolor": "black",
@@ -30,7 +30,7 @@ STYLE_FONTS = {
     CaptionStyle.BOLD: {
         "fontfile": "",
         "fontname": "Impact",
-        "fontsize": 56,
+        "fontsize": 18,
         "fontcolor": "yellow",
         "borderw": 3,
         "bordercolor": "black",
@@ -38,7 +38,7 @@ STYLE_FONTS = {
     CaptionStyle.TYPEWRITER: {
         "fontfile": "",
         "fontname": "Courier New",
-        "fontsize": 44,
+        "fontsize": 18,
         "fontcolor": "white",
         "borderw": 2,
         "bordercolor": "black",

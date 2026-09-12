@@ -4,6 +4,7 @@ setup(
     name="youtube-clipper",
     version="0.1.0",
     packages=find_packages(),
+    py_modules=["cli"],
     install_requires=[
         "yt-dlp>=2024.1.0",
         "openai-whisper>=20231117",
@@ -15,6 +16,7 @@ setup(
         ],
     },
     python_requires=">=3.8",
-    author="Kish Parikh",
+    author="Dakshit Yadav",
+    license="MIT",
     description="Extract, crop, and caption YouTube video clips",
 )
